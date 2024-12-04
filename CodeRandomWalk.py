@@ -120,7 +120,7 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
 
 # ------------------ Flux principal ------------------
 
-# Définir des valeurs par défaut cohérentes
+# Définitions des valeurs par défaut cohérentes
 default_start_date = "2023-01-03"
 default_end_date = "2024-12-31"
 default_start_sub_period = "2023-01-03"
