@@ -5,113 +5,113 @@ import matplotlib.pyplot as plt
 from datetime import date
 import datetime as dt
 
-# ------------------ Fonctions utilitaires ------------------
+# ------------------ Utility Functions ------------------
 
 def validate_date(prompt, default=None, prices=None):
     """
-    Valide une date entrée par l'utilisateur.
-    Si `prices` est fourni, vérifie que la date correspond à un jour ouvré dans les données.
+    Validates a date entered by the user.
+    If `prices` is provided, ensures the date is a valid trading day in the data.
     """
     while True:
         try:
-            date_input = input(f"{prompt} (par défaut : {default}) : ").strip()
+            date_input = input(f"{prompt} (default: {default}) : ").strip()
             if not date_input and default:
                 date_input = default
             date = dt.datetime.strptime(date_input, "%Y-%m-%d").date()
 
             if prices is not None and date not in pd.to_datetime(prices.index).date:
-                print(f"Erreur : La date {date} doit être un jour ouvré présent dans les données.")
+                print(f"Error: The date {date} must be a valid trading day in the data.")
                 continue
 
             return date
         except ValueError:
-            print("Erreur : La date entrée n'est pas valide. Veuillez respecter le format AAAA-MM-JJ.")
+            print("Error: The entered date is invalid. Please follow the YYYY-MM-DD format.")
 
 def validate_date_range(prompt_start, prompt_end, default_start=None, default_end=None, prices=None):
     """
-    Valide une plage de dates entrée par l'utilisateur avec des valeurs par défaut.
+    Validates a date range entered by the user with default values.
     """
     while True:
         start_date = validate_date(prompt_start, default_start, prices)
         end_date = validate_date(prompt_end, default_end, prices)
 
         if start_date > end_date:
-            print("Erreur : La date de fin doit être postérieure ou égale à la date de début.")
+            print("Error: The end date must be greater than or equal to the start date.")
             continue
 
         return start_date, end_date
 
 def validate_ticker(default="AAPL"):
     """
-    Valide le ticker de l'action en vérifiant qu'il contient des données.
+    Validates the stock ticker by checking if it contains data.
     """
     while True:
-        ticker = input(f"Entrez le ticker de l'action (par ex. AAPL, MSFT, TSLA) (par défaut : {default}) : ").strip().upper()
+        ticker = input(f"Enter the stock ticker (e.g., AAPL, MSFT, TSLA) (default: {default}) : ").strip().upper()
         ticker = ticker if ticker else default
         try:
             stock = yf.Ticker(ticker)
-            prices = stock.history(period="1d")  # Vérification minimaliste
+            prices = stock.history(period="1d")  # Minimal verification
             if prices.empty:
-                print(f"Erreur : Le ticker '{ticker}' ne contient pas de données valides.")
+                print(f"Error: The ticker '{ticker}' does not contain valid data.")
                 continue
             return ticker
         except Exception as e:
-            print(f"Erreur : Impossible de valider le ticker '{ticker}'. Détails : {e}")
+            print(f"Error: Unable to validate the ticker '{ticker}'. Details: {e}")
 
-# ------------------ Fonctions principales ------------------
+# ------------------ Main Functions ------------------
 
 def download_prices(ticker, start_date, end_date):
     """
-    Télécharge les données de prix de clôture pour une période donnée.
-    Gère les valeurs manquantes.
+    Downloads closing price data for a given time period.
+    Handles missing values.
     """
-    print(f"\nTéléchargement des données pour {ticker} de {start_date} à {end_date}...")
+    print(f"\nDownloading data for {ticker} from {start_date} to {end_date}...")
     prices = yf.download(ticker, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))[['Close']]
     if prices.empty:
-        raise ValueError(f"Aucune donnée téléchargée pour {ticker}. Vérifiez les dates ou le ticker.")
+        raise ValueError(f"No data downloaded for {ticker}. Check the dates or the ticker.")
     if prices.isnull().values.any():
-        print("Attention : Des valeurs manquantes ont été détectées. Elles seront remplacées par ffill() et bfill().")
+        print("Warning: Missing values detected. They will be replaced using ffill() and bfill().")
         prices = prices.ffill().bfill()
-    print(f"Données téléchargées avec succès pour {ticker}.\n")
+    print(f"Data successfully downloaded for {ticker}.\n")
     return prices
 
 def calculate_stat_returns(prices, start_sub_period=None, end_sub_period=None):
     """
-    Calcule les rendements logarithmiques, leur moyenne et leur écart-type pour une période donnée.
+    Calculates logarithmic returns, their mean, and their standard deviation for a given period.
     """
     if start_sub_period and end_sub_period:
         prices = prices.loc[start_sub_period:end_sub_period]
     if prices.empty:
-        raise ValueError(f"Aucune donnée disponible pour la période {start_sub_period} à {end_sub_period}.")
+        raise ValueError(f"No data available for the period {start_sub_period} to {end_sub_period}.")
     returns = np.log(prices['Close']).diff().dropna()
     return returns, returns.mean(), returns.std()
 
 def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date, initial_price, mean, std):
     """
-    Simule les trajectoires de prix futurs d'un actif à l'aide de Monte Carlo et trace les résultats.
+    Simulates future price trajectories of an asset using Monte Carlo and plots the results.
     """
-    # Validation de l'alignement des dates
+    # Validate alignment of dates
     if pd.Timestamp(initial_date) not in prices.index:
-        raise ValueError(f"initial_date ({initial_date}) n'est pas une date valide dans l'historique des prix.")
+        raise ValueError(f"initial_date ({initial_date}) is not a valid date in the price history.")
 
-    # Génération des dates de simulation
+    # Generate simulation dates
     dates = pd.bdate_range(start=initial_date, periods=nb_step + 1, freq='B')
     simulations = np.zeros((nb_simulation, nb_step + 1))
 
-    # Génération des marches aléatoires
+    # Generate random walks
     for i in range(nb_simulation):
         random_walk = np.random.normal(mean, std, nb_step)
         simulations[i, :] = initial_price * np.exp(np.cumsum(np.insert(random_walk, 0, 0)))
 
-    # Visualisation
+    # Visualization
     plt.figure(figsize=(12, 8))
-    plt.plot(prices.index, prices['Close'], color='red', linewidth=2, label=f'Historique des prix de {ticker}')
-    plt.scatter(initial_date, initial_price, color='black', zorder=3, label="Début des simulations")
+    plt.plot(prices.index, prices['Close'], color='red', linewidth=2, label=f'{ticker} Price History')
+    plt.scatter(initial_date, initial_price, color='black', zorder=3, label="Simulation Start")
     for i in range(min(nb_simulation, 100)):
-        plt.plot(dates, simulations[i, :], linewidth=1, alpha=0.6)
-    plt.title(f"Simulation Monte Carlo pour {ticker}")
+        plt.plot(dates, simulations[i, :], linewidth=1, alpha=0.5)
+    plt.title(f"Monte Carlo Simulation for {ticker}")
     plt.xlabel("Date")
-    plt.ylabel("Prix")
+    plt.ylabel("Price")
     plt.legend()
     plt.grid()
     plt.show()
@@ -120,22 +120,22 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
 
 def calculate_fair_price(mean_final_price, dates, risk_free_rate):
     """
-    Calcule le prix équitable basé sur les prix finaux des simulations Monte Carlo.
+    Calculates the fair price based on the final prices from the Monte Carlo simulations.
     
-    final_prices: Liste des prix finaux des simulations
-    dates: Liste des dates générées pendant la simulation
-    risk_free_rate: Taux sans risque
-    return: Prix équitable
+    final_prices: List of final prices from simulations
+    dates: List of dates generated during the simulation
+    risk_free_rate: Risk-free rate
+    return: Fair price
     """
-    t = (dates[-1] - dates[0]).days / 365  # Temps en années
+    t = (dates[-1] - dates[0]).days / 365  # Time in years
     fair_price = mean_final_price * np.exp(-risk_free_rate * t)
     return fair_price
 
-# ------------------ Flux principal ------------------
+# ------------------ Main Flow ------------------
 
-# Définitions des valeurs par défaut cohérentes
+# Define consistent default values
 default_start_date = "2023-01-03"
-default_end_date = date.today().strftime("%Y-%m-%d")  # Date du jour comme valeur par défaut pour le téléchargement de l'historique
+default_end_date = date.today().strftime("%Y-%m-%d")  # Today's date as the default for data download
 default_start_sub_period = "2023-01-03"
 default_end_sub_period = "2024-03-01"
 default_start_sim_period = "2024-03-04"
@@ -143,53 +143,53 @@ default_end_sim_period = date.today().strftime("%Y-%m-%d")
 default_nb_simulation = 10
 default_risk_free_rate = 0.03
 
-print("Bienvenue dans le simulateur de marche aléatoire, définissez les paramètres de simulation :")
+print("Welcome to the random walk simulator. Define the simulation parameters:")
 
-# Validation du ticker
+# Validate the ticker
 ticker = validate_ticker()
 
-# Validation de la période globale
+# Validate the global period
 start_date, end_date = validate_date_range(
-    f"\nEntrez la date de début du téléchargement de l'historique des prix de {ticker} :",
-    f"Entrez la date de fin du téléchargement de l'historique des prix de {ticker} :",
+    f"\nEnter the start date for downloading {ticker} price history:",
+    f"Enter the end date for downloading {ticker} price history:",
     default_start_date,
     default_end_date
 )
 
-# Téléchargement des données
+# Download price data
 prices = download_prices(ticker, start_date, end_date)
 
-# Validation de la sous-période pour les paramètres statistiques
+# Validate the sub-period for statistical parameters
 start_sub_period, end_sub_period = validate_date_range(
-    f"Entrez la date de début pour le calcul des paramètres statistiques de {ticker} :",
-    f"Entrez la date de fin pour le calcul des paramètres statistiques de {ticker} :",
+    f"Enter the start date for calculating {ticker} statistical parameters:",
+    f"Enter the end date for calculating {ticker} statistical parameters:",
     default_start_sub_period,
     default_end_sub_period,
     prices
 )
 
-# Calcul des rendements
+# Calculate returns
 returns, mean, std = calculate_stat_returns(prices, start_sub_period, end_sub_period)
 variance = std ** 2 
-print(f"\nRendements calculés pour la période {start_sub_period} à {end_sub_period} :")
-print(f"Valeur attendue (moyenne des rendements) : {mean:.6f}")
-print(f"Écart-type des rendements : {std:.6f}")
-print(f"Variance des rendements : {variance:.6f}")
+print(f"\nReturns calculated for the period {start_sub_period} to {end_sub_period}:")
+print(f"Expected value (mean returns): {mean:.6f}")
+print(f"Standard deviation of returns: {std:.6f}")
+print(f"Variance of returns: {variance:.6f}")
 
-# Validation de la sous-période pour les marches aléatoires
+# Validate the sub-period for random walks
 start_sim_period = validate_date(
-    f"\nEntrez la date de début pour les marches aléatoires :",
+    f"\nEnter the start date for random walks:",
     default_start_sim_period,
     prices
 )
 
-nb_simulation = int(input(f"Entrez le nombre de simulations à effectuer (par défaut : {default_nb_simulation}) : ") or default_nb_simulation)
-risk_free_rate = float(input(f"Entrez le taux sans risque (par défaut : {default_risk_free_rate}) : ") or default_risk_free_rate)
+nb_simulation = int(input(f"Enter the number of simulations to perform (default: {default_nb_simulation}): ") or default_nb_simulation)
+risk_free_rate = float(input(f"Enter the risk-free rate (default: {default_risk_free_rate}): ") or default_risk_free_rate)
 
-# Calcul du nombre de pas pour la simulation
-nb_step = len(pd.bdate_range(start=start_sim_period, end=end_date)) - 2  # -2 pour exclure la date de début et de fin
+# Calculate the number of steps for the simulation
+nb_step = len(pd.bdate_range(start=start_sim_period, end=end_date)) - 2  # -2 to exclude start and end dates
 
-# Simulation Monte Carlo
+# Monte Carlo Simulation
 final_prices, simulation_dates = monte_carlo_simulation(
     ticker=ticker,
     prices=prices,
@@ -203,11 +203,11 @@ final_prices, simulation_dates = monte_carlo_simulation(
 
 mean_final_price = np.mean(final_prices)
 
-# Calcul du prix équitable
+# Calculate fair price
 fair_price = calculate_fair_price(
     mean_final_price=mean_final_price,
     dates=simulation_dates,
     risk_free_rate=risk_free_rate
 )
 
-print(f"\nLe prix équitable estimé pour {ticker} est de : {fair_price:.2f}")
+print(f"\nThe estimated fair price for {ticker} is: {fair_price:.2f}")
