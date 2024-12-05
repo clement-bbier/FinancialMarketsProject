@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import date
 import datetime as dt
 
 # ------------------ Fonctions utilitaires ------------------
@@ -64,14 +65,14 @@ def download_prices(ticker, start_date, end_date):
     Télécharge les données de prix de clôture pour une période donnée.
     Gère les valeurs manquantes.
     """
-    print(f"Téléchargement des données pour {ticker} de {start_date} à {end_date}...")
+    print(f"\nTéléchargement des données pour {ticker} de {start_date} à {end_date}...")
     prices = yf.download(ticker, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))[['Close']]
     if prices.empty:
         raise ValueError(f"Aucune donnée téléchargée pour {ticker}. Vérifiez les dates ou le ticker.")
     if prices.isnull().values.any():
         print("Attention : Des valeurs manquantes ont été détectées. Elles seront remplacées par ffill() et bfill().")
         prices = prices.ffill().bfill()
-    print(f"Données téléchargées avec succès pour {ticker}.")
+    print(f"Données téléchargées avec succès pour {ticker}.\n")
     return prices
 
 def calculate_stat_returns(prices, start_sub_period=None, end_sub_period=None):
@@ -88,41 +89,16 @@ def calculate_stat_returns(prices, start_sub_period=None, end_sub_period=None):
 def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date, initial_price, mean, std):
     """
     Simule les trajectoires de prix futurs d'un actif à l'aide de Monte Carlo et trace les résultats.
-
-    Paramètres :
-    ----------
-    ticker : str
-        Symbole de l'actif (exemple : "AAPL").
-    prices : pd.DataFrame
-        Données historiques des prix (colonne 'Close' et index datetime).
-    nb_simulation : int
-        Nombre de simulations à effectuer.
-    nb_step : int
-        Nombre de jours ouvrables simulés.
-    initial_date : datetime-like
-        Date de début de la simulation.
-    initial_price : float
-        Prix initial pour les simulations.
-    mean : float
-        Rendement moyen (logarithmique) des prix historiques.
-    std : float
-        Volatilité (écart type) des rendements historiques.
-
-    Retourne :
-    ---------
-    final_prices : np.ndarray
-        Les prix finaux pour chaque simulation.
-    dates : pd.DatetimeIndex
-        Les dates couvrant la période simulée (jours ouvrables).
-
-    Visualisation :
-    --------------
-    - Historique des prix réels et trajectoires simulées
     """
-    # Génération des simulations
-    dates = pd.date_range(start=initial_date, periods=nb_step + 1, freq='B')
+    # Validation de l'alignement des dates
+    if pd.Timestamp(initial_date) not in prices.index:
+        raise ValueError(f"initial_date ({initial_date}) n'est pas une date valide dans l'historique des prix.")
+
+    # Génération des dates de simulation
+    dates = pd.bdate_range(start=initial_date, periods=nb_step + 1, freq='B')
     simulations = np.zeros((nb_simulation, nb_step + 1))
 
+    # Génération des marches aléatoires
     for i in range(nb_simulation):
         random_walk = np.random.normal(mean, std, nb_step)
         simulations[i, :] = initial_price * np.exp(np.cumsum(np.insert(random_walk, 0, 0)))
@@ -131,7 +107,7 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
     plt.figure(figsize=(12, 8))
     plt.plot(prices.index, prices['Close'], color='red', linewidth=2, label=f'Historique des prix de {ticker}')
     plt.scatter(initial_date, initial_price, color='black', zorder=3, label="Début des simulations")
-    for i in range(min(nb_simulation, 100)):  # Tracer un sous-ensemble des simulations
+    for i in range(min(nb_simulation, 100)):
         plt.plot(dates, simulations[i, :], linewidth=1, alpha=0.6)
     plt.title(f"Simulation Monte Carlo pour {ticker}")
     plt.xlabel("Date")
@@ -140,9 +116,7 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
     plt.grid()
     plt.show()
 
-    # Retourner les prix finaux et les dates
-    final_prices = simulations[:, -1]
-    return final_prices, dates
+    return simulations[:, -1], dates
 
 def calculate_fair_price(mean_final_price, dates, risk_free_rate):
     """
@@ -161,13 +135,13 @@ def calculate_fair_price(mean_final_price, dates, risk_free_rate):
 
 # Définitions des valeurs par défaut cohérentes
 default_start_date = "2023-01-03"
-default_end_date = "2024-12-31"
+default_end_date = date.today().strftime("%Y-%m-%d")  # Date du jour comme valeur par défaut pour le téléchargement de l'historique
 default_start_sub_period = "2023-01-03"
 default_end_sub_period = "2024-03-01"
 default_start_sim_period = "2024-03-04"
-default_end_sim_period = "2024-12-03"
-default_nb_simulation = 100
-risk_free_rate = 0.03
+default_end_sim_period = date.today().strftime("%Y-%m-%d")
+default_nb_simulation = 10
+default_risk_free_rate = 0.03
 
 print("Bienvenue dans le simulateur de marche aléatoire, définissez les paramètres de simulation :")
 
@@ -176,7 +150,7 @@ ticker = validate_ticker()
 
 # Validation de la période globale
 start_date, end_date = validate_date_range(
-    f"Entrez la date de début du téléchargement de l'historique des prix de {ticker} :",
+    f"\nEntrez la date de début du téléchargement de l'historique des prix de {ticker} :",
     f"Entrez la date de fin du téléchargement de l'historique des prix de {ticker} :",
     default_start_date,
     default_end_date
@@ -197,26 +171,30 @@ start_sub_period, end_sub_period = validate_date_range(
 # Calcul des rendements
 returns, mean, std = calculate_stat_returns(prices, start_sub_period, end_sub_period)
 variance = std ** 2 
-print(f"Rendements calculés pour la période {start_sub_period} à {end_sub_period} :")
+print(f"\nRendements calculés pour la période {start_sub_period} à {end_sub_period} :")
 print(f"Valeur attendue (moyenne des rendements) : {mean:.6f}")
 print(f"Écart-type des rendements : {std:.6f}")
 print(f"Variance des rendements : {variance:.6f}")
 
 # Validation de la sous-période pour les marches aléatoires
 start_sim_period = validate_date(
-    f"Entrez la date de début pour les marches aléatoires :",
+    f"\nEntrez la date de début pour les marches aléatoires :",
     default_start_sim_period,
     prices
 )
 
 nb_simulation = int(input(f"Entrez le nombre de simulations à effectuer (par défaut : {default_nb_simulation}) : ") or default_nb_simulation)
+risk_free_rate = float(input(f"Entrez le taux sans risque (par défaut : {default_risk_free_rate}) : ") or default_risk_free_rate)
+
+# Calcul du nombre de pas pour la simulation
+nb_step = len(pd.bdate_range(start=start_sim_period, end=end_date)) - 2  # -2 pour exclure la date de début et de fin
 
 # Simulation Monte Carlo
 final_prices, simulation_dates = monte_carlo_simulation(
     ticker=ticker,
     prices=prices,
     nb_simulation=nb_simulation,
-    nb_step=len(prices.loc[start_sim_period:]),
+    nb_step=nb_step,
     initial_date=start_sim_period,
     initial_price=prices.loc[pd.Timestamp(start_sim_period), 'Close'],
     mean=mean,
