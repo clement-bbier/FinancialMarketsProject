@@ -144,7 +144,7 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
     final_prices = simulations[:, -1]
     return final_prices, dates
 
-def calculate_fair_price(final_prices, dates, risk_free_rate):
+def calculate_fair_price(mean_final_price, dates, risk_free_rate):
     """
     Calcule le prix équitable basé sur les prix finaux des simulations Monte Carlo.
     
@@ -153,7 +153,6 @@ def calculate_fair_price(final_prices, dates, risk_free_rate):
     risk_free_rate: Taux sans risque
     return: Prix équitable
     """
-    mean_final_price = np.mean(final_prices)
     t = (dates[-1] - dates[0]).days / 365  # Temps en années
     fair_price = mean_final_price * np.exp(-risk_free_rate * t)
     return fair_price
@@ -222,9 +221,11 @@ final_prices, simulation_dates = monte_carlo_simulation(
     std=std
 )
 
+mean_final_price = np.mean(final_prices)
+
 # Calcul du prix équitable
 fair_price = calculate_fair_price(
-    final_prices=final_prices,
+    mean_final_price=mean_final_price,
     dates=simulation_dates,
     risk_free_rate=risk_free_rate
 )
