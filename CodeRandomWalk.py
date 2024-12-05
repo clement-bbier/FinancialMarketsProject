@@ -85,9 +85,39 @@ def calculate_stat_returns(prices, start_sub_period=None, end_sub_period=None):
     returns = np.log(prices['Close']).diff().dropna()
     return returns, returns.mean(), returns.std()
 
-def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date, initial_price, mean, std, risk_free_rate):
+def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date, initial_price, mean, std):
     """
-    Effectue une simulation Monte Carlo, trace les résultats et calcule le prix équitable.
+    Simule les trajectoires de prix futurs d'un actif à l'aide de Monte Carlo et trace les résultats.
+
+    Paramètres :
+    ----------
+    ticker : str
+        Symbole de l'actif (exemple : "AAPL").
+    prices : pd.DataFrame
+        Données historiques des prix (colonne 'Close' et index datetime).
+    nb_simulation : int
+        Nombre de simulations à effectuer.
+    nb_step : int
+        Nombre de jours ouvrables simulés.
+    initial_date : datetime-like
+        Date de début de la simulation.
+    initial_price : float
+        Prix initial pour les simulations.
+    mean : float
+        Rendement moyen (logarithmique) des prix historiques.
+    std : float
+        Volatilité (écart type) des rendements historiques.
+
+    Retourne :
+    ---------
+    final_prices : np.ndarray
+        Les prix finaux pour chaque simulation.
+    dates : pd.DatetimeIndex
+        Les dates couvrant la période simulée (jours ouvrables).
+
+    Visualisation :
+    --------------
+    - Historique des prix réels et trajectoires simulées
     """
     # Génération des simulations
     dates = pd.date_range(start=initial_date, periods=nb_step + 1, freq='B')
@@ -97,17 +127,11 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
         random_walk = np.random.normal(mean, std, nb_step)
         simulations[i, :] = initial_price * np.exp(np.cumsum(np.insert(random_walk, 0, 0)))
 
-    # Calcul du prix équitable
-    final_prices = simulations[:, -1]
-    mean_final_price = np.mean(final_prices)
-    t = (dates[-1] - dates[0]).days / 365
-    fair_price = mean_final_price * np.exp(-risk_free_rate * t)
-
     # Visualisation
     plt.figure(figsize=(12, 8))
     plt.plot(prices.index, prices['Close'], color='red', linewidth=2, label=f'Historique des prix de {ticker}')
     plt.scatter(initial_date, initial_price, color='black', zorder=3, label="Début des simulations")
-    for i in range(min(nb_simulation, 10)):  # Tracer un sous-ensemble des simulations
+    for i in range(min(nb_simulation, 100)):  # Tracer un sous-ensemble des simulations
         plt.plot(dates, simulations[i, :], linewidth=1, alpha=0.6)
     plt.title(f"Simulation Monte Carlo pour {ticker}")
     plt.xlabel("Date")
@@ -116,6 +140,22 @@ def monte_carlo_simulation(ticker, prices, nb_simulation, nb_step, initial_date,
     plt.grid()
     plt.show()
 
+    # Retourner les prix finaux et les dates
+    final_prices = simulations[:, -1]
+    return final_prices, dates
+
+def calculate_fair_price(final_prices, dates, risk_free_rate):
+    """
+    Calcule le prix équitable basé sur les prix finaux des simulations Monte Carlo.
+    
+    final_prices: Liste des prix finaux des simulations
+    dates: Liste des dates générées pendant la simulation
+    risk_free_rate: Taux sans risque
+    return: Prix équitable
+    """
+    mean_final_price = np.mean(final_prices)
+    t = (dates[-1] - dates[0]).days / 365  # Temps en années
+    fair_price = mean_final_price * np.exp(-risk_free_rate * t)
     return fair_price
 
 # ------------------ Flux principal ------------------
@@ -171,8 +211,22 @@ start_sim_period = validate_date(
 nb_simulation = int(input(f"Entrez le nombre de simulations à effectuer (par défaut : {default_nb_simulation}) : ") or default_nb_simulation)
 
 # Simulation Monte Carlo
-fair_price = monte_carlo_simulation(
-    ticker, prices, nb_simulation, len(prices.loc[start_sim_period:]), start_sim_period,
-    prices.loc[pd.Timestamp(start_sim_period), 'Close'] , mean, std, risk_free_rate
+final_prices, simulation_dates = monte_carlo_simulation(
+    ticker=ticker,
+    prices=prices,
+    nb_simulation=nb_simulation,
+    nb_step=len(prices.loc[start_sim_period:]),
+    initial_date=start_sim_period,
+    initial_price=prices.loc[pd.Timestamp(start_sim_period), 'Close'],
+    mean=mean,
+    std=std
 )
+
+# Calcul du prix équitable
+fair_price = calculate_fair_price(
+    final_prices=final_prices,
+    dates=simulation_dates,
+    risk_free_rate=risk_free_rate
+)
+
 print(f"\nLe prix équitable estimé pour {ticker} est de : {fair_price:.2f}")
