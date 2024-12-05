@@ -196,9 +196,11 @@ start_sub_period, end_sub_period = validate_date_range(
 
 # Calcul des rendements
 returns, mean, std = calculate_stat_returns(prices, start_sub_period, end_sub_period)
+variance = std ** 2 
 print(f"Rendements calculés pour la période {start_sub_period} à {end_sub_period} :")
 print(f"Valeur attendue (moyenne des rendements) : {mean:.6f}")
 print(f"Écart-type des rendements : {std:.6f}")
+print(f"Variance des rendements : {variance:.6f}")
 
 # Validation de la sous-période pour les marches aléatoires
 start_sim_period = validate_date(
