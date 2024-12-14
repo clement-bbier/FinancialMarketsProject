@@ -28,7 +28,7 @@ Pour exécuter les notebooks, suivez ces étapes :
 1. Clonez le dépôt :
    git clone https://github.com/clement-bbier/FinancialMarketsProject.git
 2. Installez les dépendances nécessaires :
-  git add requirements.txt
+   pip install -r requirements.txt
 
 ## Auteur
 **Clément Barbier** [LinkedIn](https://www.linkedin.com/in/cl%C3%A9ment-barbier-409a341b6/)
