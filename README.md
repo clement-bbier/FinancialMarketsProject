@@ -26,7 +26,7 @@ Le projet se compose de **3 exercices** :
 Pour exécuter les notebooks, suivez ces étapes :
 
 1. Clonez le dépôt :
-   git clone https://github.com/votre-utilisateur/votre-projet.git
+   git clone https://github.com/clement-bbier/FinancialMarketsProject.git
 2. Installez les dépendances nécessaires :
   git add requirements.txt
 
